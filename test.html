@@ -1,0 +1,120 @@
+<!-- For WebSocket testing, you can use this HTML file I'll create to test the WebSocket connection -->
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+    <style>
+        #messages {
+            height: 200px;
+            overflow-y: scroll;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+            font-family: monospace;
+        }
+        .error { color: red; }
+        .success { color: green; }
+        .info { color: blue; }
+        #status {
+            padding: 5px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .connected { background-color: #dff0d8; }
+        .disconnected { background-color: #f2dede; }
+    </style>
+</head>
+<body>
+    <h2>WebSocket Test</h2>
+    <div id="status" class="disconnected">Disconnected</div>
+    <div id="messages"></div>
+    <input type="text" id="messageInput" placeholder="Type a message...">
+    <button onclick="sendMessage()">Send</button>
+
+    <script>
+        const messagesDiv = document.getElementById('messages');
+        const messageInput = document.getElementById('messageInput');
+        const statusDiv = document.getElementById('status');
+        let ws = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+        const reconnectDelay = 3000; // 3 seconds
+
+        function connect() {
+            try {
+                ws = new WebSocket('ws://localhost:8000/ws');
+                
+                ws.onopen = () => {
+                    appendMessage('Connected to WebSocket server', 'success');
+                    statusDiv.textContent = 'Connected';
+                    statusDiv.className = 'connected';
+                    reconnectAttempts = 0;
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'error') {
+                            appendMessage(`Error: ${data.message}`, 'error');
+                        } else {
+                            appendMessage(`Received: ${JSON.stringify(data)}`, 'info');
+                        }
+                    } catch (e) {
+                        appendMessage(`Received: ${event.data}`, 'info');
+                    }
+                };
+
+                ws.onclose = () => {
+                    appendMessage('Disconnected from WebSocket server', 'error');
+                    statusDiv.textContent = 'Disconnected';
+                    statusDiv.className = 'disconnected';
+                    
+                    if (reconnectAttempts < maxReconnectAttempts) {
+                        reconnectAttempts++;
+                        appendMessage(`Attempting to reconnect (${reconnectAttempts}/${maxReconnectAttempts})...`, 'info');
+                        setTimeout(connect, reconnectDelay);
+                    } else {
+                        appendMessage('Max reconnection attempts reached. Please refresh the page.', 'error');
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    appendMessage(`Error: ${error.message || 'Unknown error'}`, 'error');
+                };
+            } catch (error) {
+                appendMessage(`Connection error: ${error.message}`, 'error');
+            }
+        }
+
+        function sendMessage() {
+            const message = messageInput.value;
+            if (message && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(message);
+                appendMessage(`Sent: ${message}`, 'info');
+                messageInput.value = '';
+            } else if (!ws || ws.readyState !== WebSocket.OPEN) {
+                appendMessage('Cannot send message: WebSocket is not connected', 'error');
+            }
+        }
+
+        function appendMessage(message, type = 'info') {
+            const messageElement = document.createElement('div');
+            messageElement.textContent = message;
+            messageElement.className = type;
+            messagesDiv.appendChild(messageElement);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // Allow sending message with Enter key
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Initial connection
+        connect();
+    </script>
+</body>
+</html> 
