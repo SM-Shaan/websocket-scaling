@@ -2,15 +2,24 @@
 
 aws iam create-service-linked-role --aws-service-name elasticloadbalancing.amazonaws.com
 
-2.  let's find the correct AMI ID for Amazon Linux 2023 in ap-southeast-1 (Singapore) region:
-```bash
-aws ec2 describe-images --region ap-southeast-1 --owners amazon --filters "Name=name,Values=al2023-ami-2023.*-x86_64" "Name=state,Values=available" --query 'sort_by(Images, &CreationDate)[-1].ImageId' --output text
-```
+2.  If the connection still fails, check the logs:
+EC2 instance: /var/log/user-data.log
+Docker container: docker logs websocket-app
+Application logs: /home/ec2-user/logs/websocket_server.log
 
 
 3. while making sure no other process is using port 8000:
 ```bash
 netstat -ano | findstr :8000
+```
+4. generate and set up the SSH key pair:
+```bash
+cd terraform; ssh-keygen -t rsa -b 2048 -f websocket-key -N '""'
+icacls websocket-key /inheritance:r /grant:r "$($env:USERNAME):(R,W)" # correct permissions for the private key
+```
+5. To install wscat:
+```bash
+sudo npm install -g wscat
 ```
 
 ????????
@@ -18,3 +27,4 @@ netstat -ano | findstr :8000
 VPC with public and private subnets
 NAT Gateway for private subnet internet access
 ALB in public subnet for external access
+

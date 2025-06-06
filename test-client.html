@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Test Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #messages {
+            height: 300px;
+            border: 1px solid #ccc;
+            margin: 10px 0;
+            padding: 10px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 5px;
+            border-radius: 3px;
+        }
+        .sent {
+            background-color: #e3f2fd;
+        }
+        .received {
+            background-color: #f1f8e9;
+        }
+        .error {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        .status {
+            background-color: #fff3e0;
+        }
+        .controls {
+            margin: 10px 0;
+        }
+        input[type="text"] {
+            width: 70%;
+            padding: 5px;
+        }
+        button {
+            padding: 5px 15px;
+            margin: 0 5px;
+        }
+        #connectionStatus {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+        }
+        .connected {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+        .disconnected {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        .connecting {
+            background-color: #fff3e0;
+            color: #ef6c00;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Test Client</h1>
+    <div id="connectionStatus" class="disconnected">Disconnected</div>
+    <div class="controls">
+        <input type="text" id="messageInput" placeholder="Type a message...">
+        <button onclick="sendMessage()">Send</button>
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+    </div>
+    <div id="messages"></div>
+
+    <script>
+        let ws = null;
+        let connectionTimeout = null;
+        const MAX_RECONNECT_ATTEMPTS = 3;
+        let reconnectAttempts = 0;
+
+        function updateConnectionStatus(status, message) {
+            const statusDiv = document.getElementById('connectionStatus');
+            statusDiv.className = status.toLowerCase();
+            statusDiv.textContent = message;
+        }
+
+        function addMessage(message, type) {
+            const messagesDiv = document.getElementById('messages');
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${type}`;
+            messageElement.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+            messagesDiv.appendChild(messageElement);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                addMessage('Already connected', 'status');
+                return;
+            }
+
+            updateConnectionStatus('connecting', 'Connecting...');
+            addMessage('Attempting to connect...', 'status');
+
+            // Clear any existing connection timeout
+            if (connectionTimeout) {
+                clearTimeout(connectionTimeout);
+            }
+
+            // Set connection timeout
+            connectionTimeout = setTimeout(() => {
+                if (ws && ws.readyState !== WebSocket.OPEN) {
+                    addMessage('Connection timeout', 'error');
+                    updateConnectionStatus('disconnected', 'Connection timeout');
+                    ws.close();
+                }
+            }, 10000);
+
+            try {
+                ws = new WebSocket('ws://websocket-alb-412984565.ap-southeast-1.elb.amazonaws.com:8001');
+
+                ws.onopen = function() {
+                    clearTimeout(connectionTimeout);
+                    updateConnectionStatus('connected', 'Connected');
+                    addMessage('Connection established', 'status');
+                    reconnectAttempts = 0;
+                };
+
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        addMessage(`Received: ${JSON.stringify(data, null, 2)}`, 'received');
+                    } catch (e) {
+                        addMessage(`Received: ${event.data}`, 'received');
+                    }
+                };
+
+                ws.onerror = function(error) {
+                    addMessage(`WebSocket Error: ${error.type}`, 'error');
+                    console.error('WebSocket Error:', error);
+                };
+
+                ws.onclose = function(event) {
+                    clearTimeout(connectionTimeout);
+                    updateConnectionStatus('disconnected', `Disconnected (Code: ${event.code}, Reason: ${event.reason || 'No reason provided'})`);
+                    addMessage(`Connection closed. Code: ${event.code}, Reason: ${event.reason || 'No reason provided'}`, 'error');
+
+                    // Attempt to reconnect if not manually disconnected
+                    if (event.code !== 1000 && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                        reconnectAttempts++;
+                        addMessage(`Attempting to reconnect (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`, 'status');
+                        setTimeout(connect, 2000);
+                    }
+                };
+            } catch (error) {
+                addMessage(`Connection Error: ${error.message}`, 'error');
+                updateConnectionStatus('disconnected', 'Connection failed');
+                console.error('Connection Error:', error);
+            }
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close(1000, 'Client disconnected');
+                ws = null;
+            }
+        }
+
+        function sendMessage() {
+            const messageInput = document.getElementById('messageInput');
+            const message = messageInput.value.trim();
+            
+            if (!message) return;
+
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addMessage('Not connected to server', 'error');
+                return;
+            }
+
+            try {
+                ws.send(message);
+                addMessage(`Sent: ${message}`, 'sent');
+                messageInput.value = '';
+            } catch (error) {
+                addMessage(`Error sending message: ${error.message}`, 'error');
+                console.error('Send Error:', error);
+            }
+        }
+
+        // Handle Enter key in message input
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html> 

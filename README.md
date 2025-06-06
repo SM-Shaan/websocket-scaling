@@ -111,6 +111,81 @@ cd terraform; terraform init
 terraform apply -auto-approve
 ```
 
+After deployment:
+I'll help you check the WebSocket connection after deployment. There are several ways to test it:
+
+1. First, let's get the ALB DNS name to connect to:
+
+```bash
+terraform output alb_dns_name
+```
+You can test the WebSocket connection in several ways:
+
+1. Using a WebSocket client in your browser:
+```javascript
+// Open your browser's developer console and run:
+const ws = new WebSocket('ws://websocket-alb-1942287967.ap-southeast-1.elb.amazonaws.com:8000');
+ws.onopen = () => console.log('Connected!');
+ws.onmessage = (event) => console.log('Received:', event.data);
+ws.onerror = (error) => console.log('Error:', error);
+ws.onclose = () => console.log('Disconnected!');
+```
+
+2. Using `wscat` (a command-line WebSocket client):
+```bash
+# Install wscat
+npm install -g wscat
+
+# Connect to WebSocket
+wscat -c ws://websocket-alb-412984565.ap-southeast-1.elb.amazonaws.com:8000
+```
+
+3. Using Python with `websockets`:
+```python
+import asyncio
+import websockets
+
+async def test_connection():
+    uri = "ws://websocket-alb-412984565.ap-southeast-1.elb.amazonaws.com.com:8000"
+    async with websockets.connect(uri) as websocket:
+        print("Connected!")
+        # Send a test message
+        await websocket.send("Hello!")
+        # Receive response
+        response = await websocket.recv()
+        print(f"Received: {response}")
+
+asyncio.get_event_loop().run_until_complete(test_connection())
+```
+
+4. Check the health endpoint:
+```bash
+curl http://websocket-alb-412984565.ap-southeast-1.elb.amazonaws.com/health
+```
+
+Important notes:
+1. Make sure your WebSocket application is actually running on the EC2 instance. You can check this by:
+   ```bash
+   # SSH into the EC2 instance
+   ssh ec2-user@<EC2_PUBLIC_IP>
+   
+   # Check if Docker container is running
+   docker ps
+   
+   # Check container logs
+   docker logs <container_id>
+   ```
+
+2. Verify the security groups allow traffic:
+   - ALB security group should allow inbound traffic on port 80
+   - EC2 security group should allow inbound traffic on port 8000 from the ALB
+
+3. Check the target group health:
+   - Go to AWS Console → EC2 → Target Groups
+   - Select your target group
+   - Check if the EC2 instance is healthy
+
+
 ## Infrastructure Components
 
 - VPC with public subnets
