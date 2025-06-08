@@ -129,6 +129,14 @@ resource "aws_security_group" "ec2" {
   }
 
   ingress {
+    from_port       = 8000
+    to_port         = 8000
+    protocol        = "tcp"
+    self            = true
+    description     = "WebSocket between instances"
+  }
+
+  ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -171,29 +179,38 @@ resource "aws_launch_template" "websocket" {
   user_data = base64encode(<<-EOF
     #!/bin/bash
     set -e
+    exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+
+    echo "Starting user data script..."
 
     # Update system and install required packages
+    echo "Updating system and installing packages..."
     yum update -y
     yum install -y docker git python3-pip net-tools
 
     # Install Node.js and npm
+    echo "Installing Node.js..."
     curl -sL https://rpm.nodesource.com/setup_18.x | bash -
     yum install -y nodejs
 
     # Start and enable Docker
+    echo "Starting Docker service..."
     systemctl daemon-reload
     systemctl enable docker
     systemctl start docker
 
     # Add ec2-user to docker group
+    echo "Adding ec2-user to docker group..."
     usermod -aG docker ec2-user
 
     # Create project directory
+    echo "Creating project directory..."
     PROJECT_DIR="/home/ec2-user/websocket"
     mkdir -p $PROJECT_DIR
     cd $PROJECT_DIR
 
     # Create requirements.txt
+    echo "Creating requirements.txt..."
     cat > requirements.txt << "REQEOF"
     fastapi==0.109.2
     uvicorn==0.27.1
@@ -203,12 +220,14 @@ resource "aws_launch_template" "websocket" {
     REQEOF
 
     # Create app.py
+    echo "Creating app.py..."
     cat > app.py << "APPEOF"
     from fastapi import FastAPI, WebSocket, WebSocketDisconnect
     from fastapi.middleware.cors import CORSMiddleware
     import uvicorn
     import json
     import logging
+    import socket
     logger = logging.getLogger("uvicorn")
 
     app = FastAPI()
@@ -222,14 +241,18 @@ resource "aws_launch_template" "websocket" {
     )
 
     active_connections: dict[str, WebSocket] = {}
+
     @app.get("/")
     async def root():
-      return {"message": "WebSocket server is running"}
+        hostname = socket.gethostname()
+        return {"message": f"WebSocket server is running on {hostname}"}
 
     @app.get("/health")
     async def health_check():
+        hostname = socket.gethostname()
         return {
             "status": "healthy",
+            "hostname": hostname,
             "connections": len(active_connections),
             "active_clients": list(active_connections.keys())
         }
@@ -237,43 +260,44 @@ resource "aws_launch_template" "websocket" {
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):
         try:
-            await websocket.accept()
-            client_id = str(id(websocket))
-            active_connections[client_id] = websocket
-            logger.info(f"New WebSocket connection established: {client_id}")
+        await websocket.accept()
+        client_id = str(id(websocket))
+        active_connections[client_id] = websocket
+            hostname = socket.gethostname()
+            logger.info(f"New WebSocket connection established: {client_id} on {hostname}")
 
-            await websocket.send_json({
-                "type": "connection",
-                "status": "connected",
-                "client_id": client_id
-            })
+        await websocket.send_json({
+            "type": "connection",
+            "status": "connected",
+                "client_id": client_id,
+                "hostname": hostname
+        })
 
-            try:
-                while True:
-                    data = await websocket.receive_text()
-                    logger.info(f"Received message from {client_id}: {data}")
-                    response = {
-                        "type": "echo",
-                        "message": data,
-                        "client_id": client_id
-                    }
+        try:
+            while True:
+                data = await websocket.receive_text()
+                logger.info(f"Received message from {client_id}: {data}")
+                response = {
+                    "type": "echo",
+                    "message": data,
+                        "client_id": client_id,
+                        "hostname": hostname
+                }
                     await websocket.send_json(response)
-            except WebSocketDisconnect:
+        except WebSocketDisconnect:
                 logger.info(f"WebSocket disconnected: {client_id}")
-                del active_connections[client_id]
-            except Exception as e:
-                logger.error(f"Error in WebSocket connection {client_id}: {str(e)}")
-                await websocket.close(code=1011, reason="Internal server error")
+            del active_connections[client_id]
         except Exception as e:
-            logger.error(f"Failed to establish WebSocket connection: {str(e)}")
+            logger.error(f"Error in WebSocket connection {client_id}: {str(e)}")
             if websocket.client_state.CONNECTED:
-                await websocket.close(code=1011, reason="Connection failed")
+                await websocket.close(code=1011, reason="Internal server error")
 
     if __name__ == "__main__":
         uvicorn.run(app, host="0.0.0.0", port=8000)
     APPEOF
 
     # Create Dockerfile
+    echo "Creating Dockerfile..."
     cat > Dockerfile << "DOCKEREOF"
     FROM python:3.11-slim
     WORKDIR /app
@@ -285,17 +309,22 @@ resource "aws_launch_template" "websocket" {
     DOCKEREOF
 
     # Create logs directory
+    echo "Creating logs directory..."
     mkdir -p /home/ec2-user/logs
     chown -R ec2-user:ec2-user /home/ec2-user/logs
     chmod -R 755 /home/ec2-user/logs
 
     # Set permissions
+    echo "Setting permissions..."
     chown -R ec2-user:ec2-user $PROJECT_DIR
     chmod -R 755 $PROJECT_DIR
 
     # Build and run Docker container
+    echo "Building Docker container..."
     cd $PROJECT_DIR
     docker build -t websocket-app:latest .
+
+    echo "Starting Docker container..."
     docker run -d \
         --name websocket-app \
         -p 8000:8000 \
@@ -304,9 +333,16 @@ resource "aws_launch_template" "websocket" {
         websocket-app:latest
 
     # Verify container is running
+    echo "Verifying container status..."
     docker ps
+    echo "Container logs:"
     docker logs websocket-app
+
+    # Check if port 8000 is listening
+    echo "Checking port 8000..."
     netstat -tulpn | grep -E "8000"
+
+    echo "User data script completed."
   EOF
   )
 
@@ -319,30 +355,54 @@ resource "aws_launch_template" "websocket" {
   }
 }
 
-# EC2 Instance
-resource "aws_instance" "websocket" {
+# EC2 Instance 1
+resource "aws_instance" "websocket_1" {
   launch_template {
     id      = aws_launch_template.websocket.id
     version = "$Latest"
   }
 
   tags = {
-    Name        = "websocket-instance"
+    Name        = "websocket-instance-1"
     Environment = var.environment
   }
 }
 
-# Update target group to use EC2 instance
-resource "aws_lb_target_group_attachment" "websocket" {
+# EC2 Instance 2
+resource "aws_instance" "websocket_2" {
+  launch_template {
+    id      = aws_launch_template.websocket.id
+    version = "$Latest"
+  }
+
+  tags = {
+    Name        = "websocket-instance-2"
+    Environment = var.environment
+  }
+}
+
+# Update target group to use both EC2 instances
+resource "aws_lb_target_group_attachment" "websocket_1" {
   target_group_arn = aws_lb_target_group.websocket.arn
-  target_id        = aws_instance.websocket.id
+  target_id        = aws_instance.websocket_1.id
   port             = 8000
 }
 
-# Add EC2 instance output
-output "ec2_public_ip" {
-  description = "Public IP of the EC2 instance"
-  value       = aws_instance.websocket.public_ip
+resource "aws_lb_target_group_attachment" "websocket_2" {
+  target_group_arn = aws_lb_target_group.websocket.arn
+  target_id        = aws_instance.websocket_2.id
+  port             = 8000
+}
+
+# Add EC2 instance outputs
+output "ec2_public_ip_1" {
+  description = "Public IP of the first EC2 instance"
+  value       = aws_instance.websocket_1.public_ip
+}
+
+output "ec2_public_ip_2" {
+  description = "Public IP of the second EC2 instance"
+  value       = aws_instance.websocket_2.public_ip
 }
 
 # Application Load Balancer

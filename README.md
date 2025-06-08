@@ -2,6 +2,18 @@
 
 This project implements a WebSocket server using FastAPI and deploys it behind an AWS Application Load Balancer (ALB) with WebSocket support.
 
+## Table of Contents
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+- [Project Structure](#project-structure)
+- [Local Development](#local-development)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [Infrastructure Components](#infrastructure-components)
+- [Security](#security)
+- [Monitoring](#monitoring)
+- [Troubleshooting](#troubleshooting)
+
 ## Features
 
 - FastAPI WebSocket server with proper upgrade headers
@@ -88,28 +100,20 @@ While testing, watch the server console for:
 ## Deployment
 
 2. Deploy infrastructure:
-```bash
-cd terraform
-terraform init
-terraform apply
-```
-
-Note: You'll need to provide an SSL certificate ARN for HTTPS support.
 
 After setup, if want to restart the project:
 destroy the existing infrastructure:
 ```bash
 cd terraform; terraform destroy -auto-approve
 ```
-First, let's make sure our FastAPI server is running. Open a new terminal and run
-```bash
-cd ..; python app.py
-```
+
 Now, let's initialize and apply the Terraform configuration:
 ```bash
-cd terraform; terraform init
+cd terraform; 
+terraform init
 terraform apply -auto-approve
 ```
+Note: You'll need to provide an SSL certificate ARN for HTTPS support.
 
 After deployment:
 I'll help you check the WebSocket connection after deployment. There are several ways to test it:
@@ -209,58 +213,87 @@ The application includes a health check endpoint at `/health` that returns the c
 The application logs WebSocket connections, disconnections, and messages. You can monitor these logs in CloudWatch when deployed to AWS. 
 
 -----------------------------------
-<!-- ```bash -->
 
-I'll give you a step-by-step guide to test the WebSocket project workflow:
 
-1. **First, let's make sure we're in the correct directory and have all files:**
+How to Test Communication
+1. Test via the Application Load Balancer (ALB)
+Open your test-client.html in two browser windows or tabs.
+Set the WebSocket URL to:
+```text
+  ws://websocket-alb-20250606023454-943737327.ap-southeast-1.elb.amazonaws.com:8000/ws
+```
+Click "Connect" in both clients.
+Send messages from each client.
+Observe the hostname field in the server's response. If the hostnames are different, your connections are handled by different EC2 instances.
 
-Ran tool
-Perfect! Here's the step-by-step testing workflow:
+2. Test Directly to Each EC2 Instance
+Change the WebSocket URL in your test client to:
+ws://52.221.232.163:8000/ws (Instance 1)
+ws://47.129.30.18:8000/ws (Instance 2)
+Connect to each instance in separate browser windows/tabs.
+Send messages and observe the responses.
 
-### Step 1: Install Dependencies
+3. Test Instance-to-Instance Communication (from inside EC2)
+If you want to test communication between the two EC2 instances themselves (not via ALB), you can SSH into one instance and use curl or websocat to connect to the other:
+SSH into Instance 1:
 ```bash
-pip install -r requirements.txt
+  ssh -i <private your-key> ec2-user@52.221.232.163
+```
+Install websocat (if not already installed):
+
+```bash
+  sudo yum install -y epel-release
+  sudo yum install -y websocat
 ```
 
-### Step 2: Start the WebSocket Server
+Connect to Instance 2's WebSocket server
 ```bash
-python app.py
+  websocat ws://47.129.30.18:8000/ws
+```
+-------------------------------
+For Script:
+
+pip install websockets asyncio
+python test_websocket.py
+---------------------------------
+
+
+You can test these URLs in several ways:
+1. Using the test client HTML:
+- Open test-client.html in your browser
+- Enter one of the URLs above in the connection field
+- Click "Connect"
+2. Try connecting again with the test script:
+```bash
+cd ..
+python test_websocket.py --alb <new-alb-dns>:8000 --instance1 <new-instance1-ip>:8000 --instance2 <new-instance2-ip>:8000
+```
+2.1 You can verify the server status separately by:
+2.1.1. Checking the ALB health endpoint:
+```bash
+curl http://websocket-alb-20250606023454-943737327.ap-southeast-1.elb.amazonaws.com:8000/health
+```
+2.1.2. Checking direct instance health:
+```bash
+curl http://54.251.10.12:8000/health
+curl http://54.255.76.86:8000/health
 ```
 
-### Expected Behavior:
-1. **Connection:**
-   - Immediate connection when opening test.html
-   - Connection status message appears
+3. Using browser console:
+```javascript
+const ws = new WebSocket('ws://websocket-alb-20250606023454-943737327.ap-southeast-1.elb.amazonaws.com:8000/ws');
+ws.onopen = () => console.log('Connected!');
+ws.onmessage = (event) => console.log('Received:', event.data);
+ws.onerror = (error) => console.log('Error:', error);
+ws.onclose = () => console.log('Disconnected!');
+```
 
-2. **Messaging:**
-   - Messages sent appear in the message box
-   - Server echoes back the same message
-   - Messages are properly formatted
+4. Using wscat (command-line WebSocket client)
+```bash
+wscat -c ws://websocket-alb-20250606023454-943737327.ap-southeast-1.elb.amazonaws.com:8000/ws
+```
 
-3. **Disconnection:**
-   - Clean disconnection when closing the browser
-   - Proper cleanup of connections
-
-4. **Health Check:**
-   - `/health` endpoint returns 200 OK
-   - Shows correct number of active connections
-
-### Troubleshooting:
-If something doesn't work:
-
-1. **Connection Issues:**
-   - Check if server is running
-   - Verify port 8000 is not in use
-   - Check browser console for errors
-
-2. **Message Issues:**
-   - Check server logs for errors
-   - Verify message format
-   - Check browser console for errors
-
-3. **Server Issues:**
-   - Check Python version (should be 3.11+)
-   - Verify all dependencies are installed
-   - Check for any error messages in the console
-------------------------------------------------
+Recommendation:
+For basic testing and development: Use test-client.html
+For quick testing: Use test.html
+For production monitoring and debugging: Use websocket_monitor.html

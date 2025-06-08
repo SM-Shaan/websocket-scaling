@@ -1,226 +1,141 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 import uvicorn
 import json
 import logging
-import traceback
+import socket
+from typing import Dict, Set
+from datetime import datetime
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("uvicorn")
 
 app = FastAPI()
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Store active connections
-active_connections: dict[str, WebSocket] = {}
-
-# HTML template for testing
-html_content = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>WebSocket Test</title>
-    <style>
-        #messages {
-            height: 200px;
-            overflow-y: scroll;
-            border: 1px solid #ccc;
-            padding: 10px;
-            margin-bottom: 10px;
-            font-family: monospace;
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, WebSocket] = {}
+        self.rooms: Dict[str, Set[str]] = {
+            "general": set(),
+            "support": set(),
+            "random": set()
         }
-        .error { color: red; }
-        .success { color: green; }
-        .info { color: blue; }
-        #status {
-            padding: 5px;
-            margin-bottom: 10px;
-            font-weight: bold;
-        }
-        .connected { background-color: #dff0d8; }
-        .disconnected { background-color: #f2dede; }
-    </style>
-</head>
-<body>
-    <h2>WebSocket Test</h2>
-    <div id="status" class="disconnected">Disconnected</div>
-    <div id="messages"></div>
-    <input type="text" id="messageInput" placeholder="Type a message...">
-    <button onclick="sendMessage()">Send</button>
+        self.user_rooms: Dict[str, str] = {}
 
-    <script>
-        const messagesDiv = document.getElementById('messages');
-        const messageInput = document.getElementById('messageInput');
-        const statusDiv = document.getElementById('status');
-        let ws = null;
-        let reconnectAttempts = 0;
-        const maxReconnectAttempts = 5;
-        const reconnectDelay = 3000; // 3 seconds
+    async def connect(self, websocket: WebSocket, client_id: str):
+        self.active_connections[client_id] = websocket
 
-        function connect() {
-            try {
-                ws = new WebSocket('ws://localhost:8000/ws');
-                
-                ws.onopen = () => {
-                    appendMessage('Connected to WebSocket server', 'success');
-                    statusDiv.textContent = 'Connected';
-                    statusDiv.className = 'connected';
-                    reconnectAttempts = 0;
-                };
+    async def disconnect(self, client_id: str):
+        if client_id in self.active_connections:
+            del self.active_connections[client_id]
+        if client_id in self.user_rooms:
+            room = self.user_rooms[client_id]
+            self.rooms[room].remove(client_id)
+            del self.user_rooms[client_id]
+            await self.broadcast_to_room(room, {
+                "type": "user_left",
+                "userId": client_id,
+                "username": client_id
+            })
 
-                ws.onmessage = (event) => {
-                    try {
-                        const data = JSON.parse(event.data);
-                        if (data.type === 'error') {
-                            appendMessage(`Error: ${data.message}`, 'error');
-                        } else {
-                            appendMessage(`Received: ${JSON.stringify(data)}`, 'info');
-                        }
-                    } catch (e) {
-                        appendMessage(`Received: ${event.data}`, 'info');
-                    }
-                };
+    async def join_room(self, client_id: str, room: str):
+        if client_id in self.user_rooms:
+            old_room = self.user_rooms[client_id]
+            self.rooms[old_room].remove(client_id)
+        
+        self.rooms[room].add(client_id)
+        self.user_rooms[client_id] = room
+        
+        await self.broadcast_to_room(room, {
+            "type": "user_joined",
+            "userId": client_id,
+            "username": client_id
+        })
+        
+        return list(self.rooms[room])
 
-                ws.onclose = () => {
-                    appendMessage('Disconnected from WebSocket server', 'error');
-                    statusDiv.textContent = 'Disconnected';
-                    statusDiv.className = 'disconnected';
-                    
-                    if (reconnectAttempts < maxReconnectAttempts) {
-                        reconnectAttempts++;
-                        appendMessage(`Attempting to reconnect (${reconnectAttempts}/${maxReconnectAttempts})...`, 'info');
-                        setTimeout(connect, reconnectDelay);
-                    } else {
-                        appendMessage('Max reconnection attempts reached. Please refresh the page.', 'error');
-                    }
-                };
+    async def broadcast_to_room(self, room: str, message: dict):
+        if room in self.rooms:
+            for client_id in self.rooms[room]:
+                if client_id in self.active_connections:
+                    try:
+                        await self.active_connections[client_id].send_json(message)
+                    except Exception as e:
+                        logger.error(f"Error broadcasting to {client_id}: {str(e)}")
 
-                ws.onerror = (error) => {
-                    appendMessage(`Error: ${error.message || 'Unknown error'}`, 'error');
-                };
-            } catch (error) {
-                appendMessage(`Connection error: ${error.message}`, 'error');
-            }
-        }
+manager = ConnectionManager()
 
-        function sendMessage() {
-            const message = messageInput.value;
-            if (message && ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(message);
-                appendMessage(`Sent: ${message}`, 'info');
-                messageInput.value = '';
-            } else if (!ws || ws.readyState !== WebSocket.OPEN) {
-                appendMessage('Cannot send message: WebSocket is not connected', 'error');
-            }
-        }
-
-        function appendMessage(message, type = 'info') {
-            const messageElement = document.createElement('div');
-            messageElement.textContent = message;
-            messageElement.className = type;
-            messagesDiv.appendChild(messageElement);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }
-
-        // Allow sending message with Enter key
-        messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                sendMessage();
-            }
-        });
-
-        // Initial connection
-        connect();
-    </script>
-</body>
-</html>
-"""
-
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 async def root():
-    return html_content
+    hostname = socket.gethostname()
+    return {"message": f"WebSocket server is running on {hostname}"}
 
-# @app.get("/")
-# async def root():
-#     return {"message": "WebSocket server is running"}
-
-
+@app.get("/health")
+async def health_check():
+    hostname = socket.gethostname()
+    return {
+        "status": "healthy",
+        "hostname": hostname,
+        "connections": len(manager.active_connections),
+        "active_clients": list(manager.active_connections.keys())
+    }
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     try:
         await websocket.accept()
         client_id = str(id(websocket))
-        active_connections[client_id] = websocket
-        logger.info(f"Client {client_id} connected. Total connections: {len(active_connections)}")
+        await manager.connect(websocket, client_id)
+        hostname = socket.gethostname()
+        logger.info(f"New WebSocket connection established: {client_id} on {hostname}")
         
-        # Send initial connection success message
+        # Send initial connection info
         await websocket.send_json({
             "type": "connection",
             "status": "connected",
-            "client_id": client_id
+            "client_id": client_id,
+            "hostname": hostname
         })
         
-        while True:
-            try:
-                # Receive message from client
+        try:
+            while True:
                 data = await websocket.receive_text()
-                logger.info(f"Received message from {client_id}: {data}")
-                
-                # Echo the message back to the client
-                response = {
-                    "type": "echo",
-                    "message": data,
-                    "client_id": client_id
-                }
-                await websocket.send_json(response)
-                
-            except WebSocketDisconnect:
-                raise
-            except Exception as e:
-                logger.error(f"Error processing message: {str(e)}")
-                await websocket.send_json({
-                    "type": "error",
-                    "message": "Error processing message",
-                    "error": str(e)
-                })
-                
-    except WebSocketDisconnect:
-        if client_id in active_connections:
-            del active_connections[client_id]
-        logger.info(f"Client {client_id} disconnected. Total connections: {len(active_connections)}")
-    except Exception as e:
-        logger.error(f"Error handling WebSocket connection: {str(e)}")
-        logger.error(traceback.format_exc())
-        if client_id in active_connections:
-            del active_connections[client_id]
+                message_data = json.loads(data)
+                logger.info(f"Received message from {client_id}: {message_data}")
 
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "connections": len(active_connections),
-        "active_clients": list(active_connections.keys())
-    }
+                if message_data.get("type") == "join":
+                    room = message_data.get("room", "general")
+                    users = await manager.join_room(client_id, room)
+                    await websocket.send_json({
+                        "type": "room_users",
+                        "users": list(users)
+                    })
+                elif message_data.get("type") == "message":
+                    room = manager.user_rooms.get(client_id, "general")
+                    await manager.broadcast_to_room(room, {
+                        "type": "message",
+                        "sender": client_id,
+                        "content": message_data.get("content", ""),
+                        "timestamp": datetime.now().isoformat()
+                    })
+                
+        except WebSocketDisconnect:
+            logger.info(f"WebSocket disconnected: {client_id}")
+            await manager.disconnect(client_id)
+        except Exception as e:
+            logger.error(f"Error in WebSocket connection {client_id}: {str(e)}")
+            await websocket.close(code=1011, reason="Internal server error")
+    except Exception as e:
+        logger.error(f"Failed to establish WebSocket connection: {str(e)}")
+        if websocket.client_state.CONNECTED:
+            await websocket.close(code=1011, reason="Connection failed")
 
 if __name__ == "__main__":
-    try:
-        logger.info("Starting WebSocket server...")
-        uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
-    except Exception as e:
-        logger.error(f"Failed to start server: {str(e)}")
-        logger.error(traceback.format_exc()) 
+    uvicorn.run(app, host="0.0.0.0", port=8000) 
