@@ -92,6 +92,11 @@ aws ec2 describe-instances --filters "Name=tag:Name,Values=websocket-instance*" 
 aws elbv2 describe-target-health --target-group-arn $(aws elbv2 describe-target-groups --names websocket-tg-* --query 'TargetGroups[0].TargetGroupArn' --output text)
 ```
 
+# check the security group configuration
+```bash
+aws ec2 describe-security-groups --filters "Name=group-name,Values=websocket-sg-*" --query "SecurityGroups[*].[GroupId,GroupName,IpPermissions]" --output json
+```
+
 ### Check Terraform State
 ```bash
 # List all managed resources
@@ -123,6 +128,34 @@ terraform state list
 ```bash
 # Check security group rules
 aws ec2 describe-security-groups --filters "Name=group-name,Values=websocket-*" --query 'SecurityGroups[*].{GroupName:GroupName,IpPermissions:IpPermissions,IpPermissionsEgress:IpPermissionsEgress}' --output table
+```
+
+## If websocket connection fails like:
+```txt
+7:10:31 PM - Attempting to connect...
+7:10:32 PM - WebSocket Error: error
+7:10:32 PM - Connection closed. Code: 1006, Reason: No reason provided
+7:10:32 PM - Attempting to reconnect (1/3)...
+```
+
+Then, try the following commands: 
+```bash
+#First, let's SSH into one of the EC2 instances and check if Docker is installed and running:
+ssh -i E:\websocket\terraform\websocket-key ec2-user@13.229.135.195 "sudo yum install -y docker && sudo systemctl start docker && sudo systemctl enable docker && sudo usermod -a -G docker ec2-user"
+
+#Now that Docker is installed, let's copy our application files to the EC2 instance:
+scp -i E:\websocket\terraform\websocket-key app.py requirements.txt Dockerfile ec2-user@13.229.135.195:~/
+
+# Now let's build and run the Docker container on the EC2 instance:
+ssh -i E:\websocket\terraform\websocket-key ec2-user@13.229.135.195 "docker build -t websocket-app . && docker run -d -p 8000:8000 --name websocket-app websocket-app"
+
+# verify that both containers are running and check their logs
+ssh -i E:\websocket\terraform\websocket-key ec2-user@52.77.245.76 "docker ps && docker logs websocket-app"
+```
+
+## Check stickiness of target group:
+```bash
+aws elbv2 describe-target-groups --names websocket-tg --query 'TargetGroups[0].StickinessConfig'
 ```
 
 ## Common Issues and Solutions

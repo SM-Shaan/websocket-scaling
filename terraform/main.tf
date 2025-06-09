@@ -68,11 +68,19 @@ resource "aws_security_group" "alb" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    from_port   = 8000
-    to_port     = 8000
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-    description = "WebSocket port"
+    description = "HTTP traffic"
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "HTTPS traffic"
   }
 
   egress {
@@ -80,6 +88,7 @@ resource "aws_security_group" "alb" {
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow all outbound traffic"
   }
 
   tags = {
@@ -125,15 +134,7 @@ resource "aws_security_group" "ec2" {
     to_port         = 8000
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
-    description     = "WebSocket from ALB"
-  }
-
-  ingress {
-    from_port       = 8000
-    to_port         = 8000
-    protocol        = "tcp"
-    self            = true
-    description     = "WebSocket between instances"
+    description     = "WebSocket traffic from ALB"
   }
 
   ingress {
@@ -149,6 +150,7 @@ resource "aws_security_group" "ec2" {
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow all outbound traffic"
   }
 
   tags = {
@@ -176,7 +178,8 @@ resource "aws_launch_template" "websocket" {
     subnet_id                  = aws_subnet.public[0].id
   }
 
-  user_data = base64encode(<<-EOF
+  user_data = base64encode(
+    <<-EOF
     #!/bin/bash
     set -e
     exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
@@ -228,6 +231,8 @@ resource "aws_launch_template" "websocket" {
     import json
     import logging
     import socket
+    from typing import Dict
+
     logger = logging.getLogger("uvicorn")
 
     app = FastAPI()
@@ -240,7 +245,7 @@ resource "aws_launch_template" "websocket" {
         allow_headers=["*"],
     )
 
-    active_connections: dict[str, WebSocket] = {}
+    active_connections: Dict[str, WebSocket] = {}
 
     @app.get("/")
     async def root():
@@ -260,52 +265,56 @@ resource "aws_launch_template" "websocket" {
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):
         try:
-        await websocket.accept()
-        client_id = str(id(websocket))
-        active_connections[client_id] = websocket
+            await websocket.accept()
+            client_id = str(id(websocket))
+            active_connections[client_id] = websocket
             hostname = socket.gethostname()
             logger.info(f"New WebSocket connection established: {client_id} on {hostname}")
 
-        await websocket.send_json({
-            "type": "connection",
-            "status": "connected",
+            await websocket.send_json({
+                "type": "connection",
+                "status": "connected",
                 "client_id": client_id,
                 "hostname": hostname
-        })
+            })
 
-        try:
-            while True:
-                data = await websocket.receive_text()
-                logger.info(f"Received message from {client_id}: {data}")
-                response = {
-                    "type": "echo",
-                    "message": data,
+            try:
+                while True:
+                    data = await websocket.receive_text()
+                    logger.info(f"Received message from {client_id}: {data}")
+                    response = {
+                        "type": "echo",
+                        "message": data,
                         "client_id": client_id,
                         "hostname": hostname
-                }
+                    }
                     await websocket.send_json(response)
-        except WebSocketDisconnect:
+            except WebSocketDisconnect:
                 logger.info(f"WebSocket disconnected: {client_id}")
-            del active_connections[client_id]
+                del active_connections[client_id]
+            except Exception as e:
+                logger.error(f"Error in WebSocket connection {client_id}: {str(e)}")
+                if websocket.client_state.CONNECTED:
+                    await websocket.close(code=1011, reason="Internal server error")
         except Exception as e:
-            logger.error(f"Error in WebSocket connection {client_id}: {str(e)}")
+            logger.error(f"Failed to establish WebSocket connection: {str(e)}")
             if websocket.client_state.CONNECTED:
-                await websocket.close(code=1011, reason="Internal server error")
+                await websocket.close(code=1011, reason="Connection failed")
 
     if __name__ == "__main__":
-        uvicorn.run(app, host="0.0.0.0", port=8000)
+        uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
     APPEOF
 
-    # Create Dockerfile
-    echo "Creating Dockerfile..."
-    cat > Dockerfile << "DOCKEREOF"
+        # Create Dockerfile
+        echo "Creating Dockerfile..."
+        cat > Dockerfile << "DOCKEREOF"
     FROM python:3.11-slim
     WORKDIR /app
     COPY requirements.txt .
     RUN pip install --no-cache-dir -r requirements.txt
     COPY . .
     EXPOSE 8000
-    CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+    CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"]
     DOCKEREOF
 
     # Create logs directory
@@ -383,13 +392,13 @@ resource "aws_instance" "websocket_2" {
 
 # Update target group to use both EC2 instances
 resource "aws_lb_target_group_attachment" "websocket_1" {
-  target_group_arn = aws_lb_target_group.websocket.arn
+  target_group_arn = aws_lb_target_group.websocket_tg.arn
   target_id        = aws_instance.websocket_1.id
   port             = 8000
 }
 
 resource "aws_lb_target_group_attachment" "websocket_2" {
-  target_group_arn = aws_lb_target_group.websocket.arn
+  target_group_arn = aws_lb_target_group.websocket_tg.arn
   target_id        = aws_instance.websocket_2.id
   port             = 8000
 }
@@ -422,8 +431,8 @@ resource "aws_lb" "websocket" {
 }
 
 # Target Group
-resource "aws_lb_target_group" "websocket" {
-  name        = "websocket-tg-${formatdate("YYYYMMDDHHmmss", timestamp())}"
+resource "aws_lb_target_group" "websocket_tg" {
+  name        = "websocket-tg"
   port        = 8000
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
@@ -435,39 +444,33 @@ resource "aws_lb_target_group" "websocket" {
     interval            = 30
     matcher            = "200"
     path               = "/health"
-    port               = "8000"
+    port               = "traffic-port"
     protocol           = "HTTP"
-    timeout            = 10
+    timeout            = 5
     unhealthy_threshold = 3
   }
 
-  # Enable stickiness for WebSocket connections
   stickiness {
     type            = "lb_cookie"
-    cookie_duration = 86400
-    enabled         = true
-  }
-
-  # Enable WebSocket support
-  lifecycle {
-    create_before_destroy = true
+    cookie_name     = "websocket_session"
+    cookie_duration = 3600
+    enabled         = true 
   }
 
   tags = {
-    Name        = "websocket-tg"
-    Environment = var.environment
+    Name = "websocket-tg"
   }
 }
 
 # WebSocket Listener
 resource "aws_lb_listener" "websocket" {
   load_balancer_arn = aws_lb.websocket.arn
-  port              = 8000
+  port              = 80
   protocol          = "HTTP"
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.websocket.arn
+    target_group_arn = aws_lb_target_group.websocket_tg.arn
   }
 }
 

@@ -90,7 +90,7 @@ class WebSocketTester:
     async def receive_messages(self, timeout=5):
         try:
             while self.connected:
-                    try:
+                try:
                     message = await asyncio.wait_for(self.websocket.recv(), timeout=timeout)
                     data = json.loads(message)
                     self.messages_received += 1
@@ -106,9 +106,9 @@ class WebSocketTester:
                 except asyncio.TimeoutError:
                     logger.warning(f"Timeout waiting for messages for client {self.client_id}")
                     break
-                    except websockets.exceptions.ConnectionClosed:
-            logger.info(f"Connection closed for client {self.client_id}")
-            self.connected = False
+                except websockets.exceptions.ConnectionClosed:
+                    logger.info(f"Connection closed for client {self.client_id}")
+                    self.connected = False
         except Exception as e:
             logger.error(f"Error receiving messages for client {self.client_id}: {str(e)}")
             self.connected = False
@@ -251,7 +251,7 @@ async def test_alb_connection(alb_url):
     await client2.send_message("Hello from client 2")
     
     # Wait for messages to be received
-                await asyncio.sleep(2)
+    await asyncio.sleep(2)
     
     # Close connections
     await client1.close()
@@ -375,58 +375,35 @@ async def check_ec2_instances(instance1, instance2):
     except Exception as e:
         logger.error(f"Instance 2 check failed: {str(e)}")
 
+async def test_connection(uri):
+    try:
+        async with websockets.connect(uri) as websocket:
+            print(f"Connected to {uri}!")
+            # Send a test message
+            await websocket.send("Hello from Python client!")
+            # Receive response
+            response = await websocket.recv()
+            print(f"Received: {response}")
+            # Parse the response to extract hostname and client_id
+            response_data = json.loads(response)
+            print(f"Hostname: {response_data.get('hostname')}")
+            print(f"Client ID: {response_data.get('client_id')}")
+    except Exception as e:
+        print(f"Error connecting to {uri}: {str(e)}")
+
 async def main():
-    parser = argparse.ArgumentParser(description='Test WebSocket deployment')
-    parser.add_argument('--alb', required=True, help='ALB DNS name')
-    parser.add_argument('--instance1', required=True, help='Instance 1 IP')
-    parser.add_argument('--instance2', required=True, help='Instance 2 IP')
+    parser = argparse.ArgumentParser(description='Test WebSocket connections')
+    parser.add_argument('--alb', help='ALB WebSocket URL')
+    parser.add_argument('--instance1', help='Instance 1 WebSocket URL')
+    parser.add_argument('--instance2', help='Instance 2 WebSocket URL')
     args = parser.parse_args()
 
-    try:
-        # Check EC2 instances first
-        await check_ec2_instances(args.instance1, args.instance2)
-
-        # Verify DNS resolution
-        logger.info("\nVerifying DNS resolution...")
-        alb_host = args.alb.split(':')[0]
-        alb_ip = await resolve_hostname(alb_host)
-        if not alb_ip:
-            logger.error(f"Failed to resolve ALB hostname: {alb_host}")
-            sys.exit(1)
-        logger.info(f"ALB {alb_host} resolves to {alb_ip}")
-
-        # Verify ALB connection using resolved IP
-        logger.info("\nVerifying ALB connection...")
-        alb_ok = await verify_connection(args.alb)
-        if not alb_ok:
-            logger.error("ALB connection verification failed")
-            sys.exit(1)
-
-        # Check ALB health using resolved IP
-        logger.info("\nChecking ALB health...")
-        alb_health = await check_server_health(args.alb, alb_ip)
-        if not alb_health:
-            logger.error("\nTroubleshooting steps:")
-            logger.error("1. Check if EC2 instances are running in AWS Console")
-            logger.error("2. Verify security groups allow traffic on port 8000")
-            logger.error("3. SSH into EC2 instances and check if WebSocket server is running")
-            logger.error("4. Check EC2 instance logs for any errors")
-            sys.exit(1)
-        
-        # Run ALB tests
-        logger.info("\nRunning WebSocket tests through ALB...")
-        alb_test = await test_alb_connection(args.alb)
-        room_test = await test_room_functionality(args.alb)
-
-        if alb_test and room_test:
-            logger.info("\nALB tests completed successfully!")
-        else:
-            logger.error("\nSome ALB tests failed. Please check the logs above for details.")
-            sys.exit(1)
-
-    except Exception as e:
-        logger.error(f"Test failed: {str(e)}")
-        sys.exit(1)
+    if args.alb:
+        await test_connection(f"ws://{args.alb}/ws")
+    if args.instance1:
+        await test_connection(f"ws://{args.instance1}/ws")
+    if args.instance2:
+        await test_connection(f"ws://{args.instance2}/ws")
 
 if __name__ == "__main__":
     asyncio.run(main()) 

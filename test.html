@@ -90,7 +90,12 @@
         function sendMessage() {
             const message = messageInput.value;
             if (message && ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(message);
+                const messageData = {
+                    type: "message",
+                    content: message,
+                    room: "general"
+                };
+                ws.send(JSON.stringify(messageData));
                 appendMessage(`Sent: ${message}`, 'info');
                 messageInput.value = '';
             } else if (!ws || ws.readyState !== WebSocket.OPEN) {

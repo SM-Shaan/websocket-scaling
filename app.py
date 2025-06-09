@@ -107,22 +107,50 @@ async def websocket_endpoint(websocket: WebSocket):
         try:
             while True:
                 data = await websocket.receive_text()
-                message_data = json.loads(data)
-                logger.info(f"Received message from {client_id}: {message_data}")
-
-                if message_data.get("type") == "join":
-                    room = message_data.get("room", "general")
-                    users = await manager.join_room(client_id, room)
-                    await websocket.send_json({
-                        "type": "room_users",
-                        "users": list(users)
-                    })
-                elif message_data.get("type") == "message":
+                logger.info(f"Received message from {client_id}: {data}")
+                
+                try:
+                    # Try to parse as JSON first
+                    message_data = json.loads(data)
+                    
+                    if message_data.get("type") == "join":
+                        room = message_data.get("room", "general")
+                        users = await manager.join_room(client_id, room)
+                        await websocket.send_json({
+                            "type": "room_users",
+                            "users": list(users)
+                        })
+                    elif message_data.get("type") == "message":
+                        room = manager.user_rooms.get(client_id, "general")
+                        # Send echo response to sender
+                        await websocket.send_json({
+                            "type": "message",
+                            "sender": "server",
+                            "content": message_data.get("content", ""),
+                            "timestamp": datetime.now().isoformat()
+                        })
+                        # Broadcast to room
+                        await manager.broadcast_to_room(room, {
+                            "type": "message",
+                            "sender": client_id,
+                            "content": message_data.get("content", ""),
+                            "timestamp": datetime.now().isoformat()
+                        })
+                except json.JSONDecodeError:
+                    # If not JSON, treat as plain text message
                     room = manager.user_rooms.get(client_id, "general")
+                    # Send echo response to sender
+                    await websocket.send_json({
+                        "type": "message",
+                        "sender": "server",
+                        "content": data,
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    # Broadcast to room
                     await manager.broadcast_to_room(room, {
                         "type": "message",
                         "sender": client_id,
-                        "content": message_data.get("content", ""),
+                        "content": data,
                         "timestamp": datetime.now().isoformat()
                     })
                 
