@@ -6,10 +6,14 @@ import logging
 import socket
 from typing import Dict, Set
 from datetime import datetime
+from prometheus_fastapi_instrumentator import Instrumentator
 
 logger = logging.getLogger("uvicorn")
 
 app = FastAPI()
+
+# Instrument FastAPI app for Prometheus metrics
+Instrumentator().instrument(app).expose(app)
 
 app.add_middleware(
     CORSMiddleware,

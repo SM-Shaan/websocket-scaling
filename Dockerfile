@@ -1,5 +1,5 @@
 # create a Dockerfile to containerize the application:
-FROM python:3.11-slim
+FROM python:3.9-slim
 
 WORKDIR /app
 

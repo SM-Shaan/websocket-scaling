@@ -1,11 +1,48 @@
 # WebSocket Server with ALB Setup
 
-This project implements a WebSocket server using FastAPI and deploys it behind an AWS Application Load Balancer (ALB) with WebSocket support.
+This project implements a WebSocket server using FastAPI and deploys it behind an AWS Application Load Balancer (ALB) with WebSocket support. It provides a scalable, production-ready WebSocket infrastructure with proper load balancing and health monitoring.
+
+## What is HTTP?
+
+Let’s start by looking at the basic implementation of a WebSocket server in a messaging app scenario. Imagine two clients messaging each other over an HTTP server. Each time a client sends a message, an HTTP request is sent, a server thread is generated, and the message is processed and returned to the other client. This process is repeated for every message, which is inefficient as the threads are created and terminated repeatedly.
+
+![HTTP](/DOC/diagrams/http.drawio.svg)
+
+## What is WebSocket?
+
+WebSocket is a communication protocol that provides a full-duplex, persistent connection between a client and a server. Unlike traditional HTTP requests, WebSocket connections:
+
+- Remain open after the initial handshake
+- Allow bi-directional communication
+- Enable real-time data exchange
+- Maintain connection state
+- Reduce overhead by eliminating repeated HTTP headers
+
+![WebSocket](/DOC/diagrams/websocket.svg)
+
+In a WebSocket implementation, after the handshake between the client and the server is successful, the client is subscribed to the server.
+
+For example, if two clients are subscribed to one WebSocket server, when client 1 sends a message to client 2, the server picks up the message and sends it to the subscribed client 2. This communication continues until the connection terminates.
+
+
+![Websocket connection](/DOC/diagrams/connection.drawio.svg)
+
+
+## WebSocket vs HTTP
+
+| Feature | WebSocket | HTTP |
+|---------|-----------|------|
+| Connection | Persistent | Stateless |
+| Protocol | ws:// or wss:// | http:// or https:// |
+| Headers | Once during handshake | Every request |
+| Overhead | Low | High |
+| State |  Stateful | Stateless |
+| Use Case | Real-time applications | Traditional web requests |
+
 
 ## Table of Contents
-- [Features](#features)
+- [Architecture Overview](#architecture-overview)
 - [Prerequisites](#prerequisites)
-- [Project Structure](#project-structure)
 - [Local Development](#local-development)
 - [Testing](#testing)
 - [Deployment](#deployment)
@@ -13,31 +50,50 @@ This project implements a WebSocket server using FastAPI and deploys it behind a
 - [Security](#security)
 - [Monitoring](#monitoring)
 - [Troubleshooting](#troubleshooting)
+- [Cleanup](#cleanup)
 
-## Features
+## Project Overview
+This project is divided into various chapters, each demonstrating different implementation approaches and deployment strategies:
 
-- FastAPI WebSocket server with proper upgrade headers
-- AWS ALB with WebSocket listeners (HTTP 80 / HTTPS 443)
-- ALB target group stickiness enabled
-- Containerized application using Docker
-- Infrastructure as Code using Terraform
+- **Chapter 1**: WebSocket Connection and Sticky Sessions ([Learn more](DOC/Stickiness.md))
+- **Chapter 2**: Shared Session Management ([Learn more](DOC/Shared-sessions.md))
+- **Chapter 3**: Scaling WebSocket Applications ([Learn more](DOC/websocket-scaling.md))
+- **Chapter 4**: Terraform Deployment for WebSocket Infrastructure ([Learn more](DOC/Terraform-deployment.md))
 
-## Prerequisites
+## Architecture Overview
 
-- Python 3.11+
-- Docker
-- AWS CLI configured with appropriate credentials
-- Terraform installed
-- SSL certificate for HTTPS (if using HTTPS)
+The project follows a microservices architecture with the following components:
 
-## Local Development
+![Diagram](/DOC/diagrams/dia9.drawio.svg)
 
-1. Install dependencies:
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Python 3.11 or higher installed
+- Docker installed and running
+- AWS CLI configured with appropriate credentials and permissions
+- Terraform installed and initialized
+- SSL certificate ARN for HTTPS (if HTTPS is required)
+- Basic knowledge of AWS services (e.g., EC2, ALB, VPC)
+- Git installed for version control
+- A code editor or IDE (e.g., Visual Studio Code)
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/SM-Shaan/websocket-scaling.git
+cd websocket
+```
+
+2. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Run the server locally:
+3. Run the server locally:
 ```bash
 python app.py
 ```
@@ -50,8 +106,12 @@ INFO:     Application startup complete.
 ```
 
 ### Step 3: Test WebSocket Connection
-1. Open the `test.html` file in your web browser
-2. You should see:
+1. In `test.html`, update the path (if need):
+``` 
+ws = new WebSocket('ws://localhost:8000/ws');
+```
+2. Open the `test.html` file in your web browser
+3. You should see:
    - A message box
    - A "Connected to WebSocket server" message
    - An input field to type messages
@@ -63,14 +123,15 @@ INFO:     Application startup complete.
    - "Sent: [your message]" in the message box
    - "Received: [your message]" as an echo response
 
+![Health_check](DOC/images/local1.png)
 ### Step 5: Test Multiple Connections
 1. Open `test.html` in multiple browser windows
 2. Each window should:
    - Connect successfully
    - Show its own connection status
    - Be able to send/receive messages independently
-![Health_check](images/diagram.svg)
-![Health_check](images/diagram.svg)
+
+![Health_check](DOC/images/2.png)
 
 ### Step 6: Test the Health Endpoint
 1. Open your web browser
@@ -82,200 +143,134 @@ INFO:     Application startup complete.
     "connections": 0
 }
 ```
-![Health_check](images/diagram.svg)
+![Health_check](DOC/images/3.png)
 
 ### Step 7: Test Error Handling
-1. Stop the server (Ctrl+C)
-2. You should see:
-   - "Disconnected from WebSocket server" in the test.html window
-3. Restart the server
-4. The connection should automatically reconnect
 
-### Step 8: Monitor Server Logs
-While testing, watch the server console for:
-- Connection events
-- Message receipts
-- Disconnection events
-- Any errors
+1. Stop the WebSocket server by pressing `Ctrl+C` in the terminal.
+2. Observe the `test.html` browser window:
+   - It should display a message like "Disconnected from WebSocket server."
+3. Restart the WebSocket server using the command:
+   ```bash
+   python app.py
+   ```
+4. Verify that the connection in `test.html` automatically reconnects and resumes functionality.
 
-![Health_check](images/diagram.svg)
+![Health_check](DOC/images/4.png)
+<!-- ### Step 8: Monitor Server Logs
 
-## Deployment
+During testing, observe the server console for the following events:
+- **Connection Events**: Logs indicating when a client connects to the WebSocket server.
+- **Message Receipts**: Logs showing messages received from clients.
+- **Disconnection Events**: Logs indicating when a client disconnects from the server.
+- **Error Logs**: Any errors encountered during operation, such as connection issues or unexpected exceptions. -->
+## Load Testing
 
-2. Deploy infrastructure:
-
-Now, let's initialize and apply the Terraform configuration:
+### Step 1: Start the Stack
+Open docker desktop. Run the following command to build and start the stack:
 ```bash
-cd terraform; 
-
-# Generate key pair
-ssh-keygen -t rsa -b 2048 -f websocket-key -N '""'
-
-terraform init
-terraform apply -auto-approve
+docker-compose up -d --build
 ```
-![Health_check](images/diagram.svg)
 
-Note: You'll need to provide an SSL certificate ARN for HTTPS support.
+### Step 2: Access the WebSocket Server
+- Open [http://localhost:8000](http://localhost:8000) in your browser.
+- Use the `test-client.html` file to test the WebSocket connection.
 
-After deployment:
-I'll help you check the WebSocket connection after deployment. There are several ways to test it:
+### Step 3: Access Grafana
+- Open [http://localhost:3000](http://localhost:3000).
+- Log in with:
+   - **Username**: `admin`
+   - **Password**: `admin`
+- Add Prometheus as a data source:
+   1. Navigate to **Configuration > Data Sources**.
+   2. Click **Add data source**.
+   3. Select **Prometheus**.
+   4. Set the URL to `http://prometheus:9090`.
+   5. Click **Save & Test**.
+- Import the dashboard:
+   1. Go to **Dashboards > Import**.
+   2. Click **Upload JSON file**.
+   3. Select the `grafana-dashboard.json` file.
+   4. Click **Import**.
 
-1. First, let's get the ALB DNS name to connect to:
-
+### Step 4: Run Load Tests
+- Install k6 from [k6 Installation Guide](https://grafana.com/docs/k6/latest/set-up/install-k6/). For Windows, use the MSI installer.
+- Run the load test:
 ```bash
-terraform output alb_dns_name
+& 'C:\Program Files\k6\k6.exe' run load-test.js
 ```
-You can test the WebSocket connection in several ways:
 
-1. Check the health endpoint:
+### Step 5: Monitor the Results
+- Open the Grafana dashboard to monitor:
+   - Active WebSocket connections.
+   - Message latency.
+   - Message throughput.
+- The dashboard updates automatically every 5 seconds.
+
+### Load Test Configuration
+The load test will:
+- Ramp up to **50 users** in **30 seconds**.
+- Stay at **50 users** for **1 minute**.
+- Ramp up to **100 users** in **30 seconds**.
+- Stay at **100 users** for **1 minute**.
+- Ramp down to **0 users** in **30 seconds**.
+
+### Step 6: Scale the Application
+To scale the application, run multiple instances:
 ```bash
-curl http://websocket-alb-20250609042220-945251384.ap-southeast-1.elb.amazonaws.com/health
+docker-compose up -d --scale app=3
 ```
-![Health_check](images/diagram.svg)
+- All instances will share the same Redis instance for message broadcasting.
+- Prometheus will collect metrics from all instances.
 
-2. Test the WebSocket connection:
-```bash
-wscat -c ws://websocket-alb-20250609042220-945251384.ap-southeast-1.elb.amazonaws.com/ws
-```
-![Health_check](images/diagram.svg)
+### Features of the Setup
+- **Redis**: Used for message broadcasting across instances.
+- **Session Persistence**: Managed in Redis.
+- **Prometheus**: Collects metrics from all instances.
+- **Grafana**: Provides visualization of metrics.
+- **k6**: Performs load testing.
 
-3. Open Google Chrome. Right-click anywhere on the page and select Inspect. Go to the Console tab. Using a WebSocket client in your browser:
-```javascript
-// Open your browser's developer console and run:
-const ws2 = new WebSocket('ws://websocket-alb-20250609025907-1638792794.ap-southeast-1.elb.amazonaws.com/ws');
-ws2.onopen = () => { 
-  console.log('Connected!');
-  ws2.send('Hello from browser!');
-};
-ws2.onmessage = (event) => console.log('Received:', event.data);
-ws2.onerror = (error) => console.log('Error:', error);
-ws2.onclose = () => console.log('Disconnected!');
-```
-<!-- 
-2. Test direct connection to EC2
-SSH into any of EC2 instances: ssh -i <private your-key> ec2-user@52.221.232.163
-Using `wscat` (a command-line WebSocket client):
-```bash
-# Install wscat
-sudo npm install -g wscat
+----------------
+http://localhost:8000/metrics 
+This should load the metrics from your FastAPI application. If it does, it confirms that your websocket-server is correctly exposing metrics, and Prometheus is successfully collecting them.
 
-# wscat -c ws://18.141.164.235:8000/ws
-# Connect to WebSocket
-wscat -c ws://websocket-alb-20250609060951-486339179.ap-southeast-1.elb.amazonaws.com:8000
-``` -->
+ check if k6 is successfully pushing its metrics to Prometheus. Go to your Prometheus UI: http://localhost:9090/graph
+ In the "Expression" input field, type one of the k6 metric names, for example: ws_connection_success_rate_total and press "Execute" (or select "Graph" tab if it's not already there).
+If you see data on the graph, it means k6 is successfully sending metrics to Prometheus
+----------------
 
-4. Using Python with `websockets`:
-```python
-import asyncio
-import websockets
+## Troubleshooting
 
-async def test_connection():
-    uri = "ws://websocket-alb-20250609052437-259866380.ap-southeast-1.elb.amazonaws.com:8000"
-    async with websockets.connect(uri) as websocket:
-        print("Connected!")
-        # Send a test message
-        await websocket.send("Hello!")
-        # Receive response
-        response = await websocket.recv()
-        print(f"Received: {response}")
+Common issues and solutions:
 
-asyncio.get_event_loop().run_until_complete(test_connection())
-```
+1. **Connection Issues**
+   - Check security groups
+   - Verify ALB configuration
+   - Check instance health
 
-## How to Test Communication
-1. Test via the Application Load Balancer (ALB)
-Open your test-client.html in two browser windows or tabs.
-Set the WebSocket URL to:
-```text
-  ws = new WebSocket('ws://websocket-alb-20250609060951-486339179.ap-southeast-1.elb.amazonaws.com/ws');
-```
-Click "Connect" in both clients.
-Send messages from each client.
+2. **Performance Issues**
+   - Monitor instance metrics
+   - Check ALB metrics
+   - Verify auto-scaling
 
-![Health_check](images/diagram.svg)
-
-Observe the hostname field in the server's response. If the hostnames are different, your connections are handled by different EC2 instances.
-
-Important notes:
-1. Make sure your WebSocket application is actually running on the EC2 instance. You can check this by:
-```bash
-   # SSH into the EC2 instance
-   ssh -i <websocket-private-key> ec2-user@18.141.164.235
-   
-   # Check if Docker container is running
-   docker ps
-   ![Health_check](images/diagram.svg)
-   
-   # Check container logs
-   docker logs <container_id>
-```
-   ![Health_check](images/diagram.svg)
-
-2. Verify the security groups allow traffic:
-   - ALB security group should allow inbound traffic on port 80
-   - EC2 security group should allow inbound traffic on port 8000 from the ALB
-
-3. Check the target group health:
-   - Go to AWS Console → EC2 → Target Groups
-   - Select your target group
-   - Check if the EC2 instance is healthy
+3. **Deployment Issues**
+   - Check Terraform state
+   - Verify IAM permissions
+   - Check container logs
 
 
-## Infrastructure Components
+## Additional Resources
 
-- VPC with public subnets
-- Application Load Balancer
-- Target Group with stickiness enabled
-- Security Groups for ALB and ECS tasks
-- HTTP (80) and HTTPS (443) listeners
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- [AWS ALB Documentation](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/introduction.html)
+- [WebSocket Protocol](https://tools.ietf.org/html/rfc6455)
 
-## Health Check
+## Contributing
 
-The application includes a health check endpoint at `/health` that returns the current number of active WebSocket connections.
-
-## Security
-
-- CORS is enabled for development (should be restricted in production)
-- Security groups are configured to allow only necessary traffic
-- HTTPS support with SSL/TLS termination at the ALB
-
-## Monitoring
-
-The application logs WebSocket connections, disconnections, and messages. You can monitor these logs in CloudWatch when deployed to AWS. 
-
-After setup, if want to restart the project:
-destroy the existing infrastructure:
-```bash
-cd terraform; terraform destroy -auto-approve
-```
----
-## Recommendation:
-- For basic testing and development: Use test-client.html
-- For quick testing: Use test.html
-- For production monitoring and debugging: Use websocket_monitor.html
-
-<!-- 2. Test Directly to Each EC2 Instance
-Change the WebSocket URL in your test client to:
-ws://52.221.232.163:8000/ws (Instance 1)
-ws://47.129.30.18:8000/ws (Instance 2)
-Connect to each instance in separate browser windows/tabs.
-Send messages and observe the responses. -->
-
-<!-- 3. Test Instance-to-Instance Communication (from inside EC2)
-If you want to test communication between the two EC2 instances themselves (not via ALB), you can SSH into one instance and use curl or websocat to connect to the other:
-SSH into Instance 1:
-```bash
-  ssh -i <websocket-private-key> ec2-user@18.141.164.235
-```
-Install websocat (if not already installed) or EC2 instance is missing the cc compiler needed to install websocat:
-
-```bash
-  sudo yum groupinstall -y 'Development Tools'
-  sudo yum install -y openssl-devel
-```
-
-Connect to Instance 2's WebSocket server
-```bash
-  websocat ws://18.141.164.235:8000/ws -->
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+-----------------------------
 

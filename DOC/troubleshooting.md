@@ -158,6 +158,84 @@ ssh -i E:\websocket\terraform\websocket-key ec2-user@52.77.245.76 "docker ps && 
 aws elbv2 describe-target-groups --names websocket-tg --query 'TargetGroups[0].StickinessConfig'
 ```
 
+## For local development: find where k6 is installed:
+```bash
+Get-ChildItem -Path "C:\Program Files\k6" -ErrorAction SilentlyContinue
+# Then, run
+& 'C:\Program Files\k6\k6.exe' run load-test.js
+```
+
+## For deployment: 
+###  check if we can access Grafana:
+```bash
+Invoke-WebRequest -Uri "http://54.255.207.156:3000/api/health" -UseBasicParsing | Select-Object -ExpandProperty Content
+```
+### access the Prometheus metrics endpoint directly:
+```bash
+Invoke-WebRequest -Uri "http://54.255.207.156:9090/metrics" -UseBasicParsing | Select-Object -ExpandProperty Content
+```
+### check if we can access Grafana and verify the Prometheus datasource:
+```bash
+
+```
+##  verify if the WebSocket instances are running and accessible:
+```bash
+Invoke-WebRequest -Uri "http://52.221.201.44:8000/health" -UseBasicParsing | Select-Object -ExpandProperty Content
+# The WebSocket instances are not accessible directly from the internet if they're in a private subnet, then: 
+Invoke-WebRequest -Uri "http://websocket-alb-20250612035316-1435454575.ap-southeast-1.elb.amazonaws.com/health" -UseBasicParsing | Select-Object -ExpandProperty Content
+```
+
+## check if we can access the metrics endpoint through the ALB:
+```bash
+Invoke-WebRequest -Uri "http://websocket-alb-20250612035316-1435454575.ap-southeast-1.elb.amazonaws.com/metrics" -UseBasicParsing | Select-Object -ExpandProperty Content
+```
+
+##  check if we can access Prometheus and verify it's scraping metrics from our WebSocket instances
+```bash
+curl http://54.255.207.156:9090/api/v1/targets
+```
+
+## check if we can access Grafana and verify the Prometheus datasource is configured
+```bash
+$pair = "admin:admin"; $encodedCreds = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($pair)); $basicAuthValue = "Basic $encodedCreds"; Invoke-WebRequest -Uri "http://54.255.207.156:3000/api/datasources" -Headers @{Authorization = $basicAuthValue}
+```
+
+## verify the metrics endpoint is accessible on one of the WebSocket instances::
+```bash
+curl http://52.221.201.44:8000/metrics
+```
+
+## verify if Prometheus is running and accessible:
+```bash
+curl http://localhost:9090/-/healthy
+```
+## After SSH into Ec2 instances, if Docker-compose is not installed:
+```bash
+sudo yum install -y docker-compose
+# If that doesn't work, we can install it using pip:
+sudo yum install -y python3-pip
+sudo pip3 install docker-compose
+
+# After installing Docker Compose, let's check if Docker is running
+sudo systemctl status docker
+```
+
+## check if Prometheus is accessible from Grafana:
+```bash
+docker-compose exec grafana wget -qO- http://prometheus:9090/api/v1/status/config
+```
+## verify if Prometheus is actually receiving metrics from k6 by checking its targets:
+```bash
+curl -s http://localhost:9090/api/v1/targets
+```
+## check if Prometheus is now storing the metrics from k6.
+```bash
+docker-compose exec prometheus wget -qO- 'http://localhost:9090/api/v1/query?query=ws_connection_success_rate'
+```
+## ping Prometheus from within the k6 container.
+```bash
+docker-compose exec k6 ping prometheus
+```
 ## Common Issues and Solutions
 
 1. **Connection Timeouts**
