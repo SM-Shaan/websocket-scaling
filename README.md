@@ -58,7 +58,7 @@ This project is divided into various chapters, each demonstrating different impl
 - **Chapter 1**: WebSocket Connection and Sticky Sessions ([Learn more](DOC/Stickiness.md))
 - **Chapter 2**: Shared Session Management ([Learn more](DOC/Shared-sessions.md))
 - **Chapter 3**: Scaling WebSocket Applications ([Learn more](DOC/websocket-scaling.md))
-- **Chapter 4**: Terraform Deployment for WebSocket Infrastructure ([Learn more](DOC/Terraform-deployment.md))
+- **Chapter 4**: Terraform Deployment for WebSocket Infrastructure ([Learn more](DOC/Deployment_terraform.md))
 
 ## Architecture Overview
 
@@ -230,14 +230,6 @@ docker-compose up -d --scale app=3
 - **Grafana**: Provides visualization of metrics.
 - **k6**: Performs load testing.
 
-----------------
-http://localhost:8000/metrics 
-This should load the metrics from your FastAPI application. If it does, it confirms that your websocket-server is correctly exposing metrics, and Prometheus is successfully collecting them.
-
- check if k6 is successfully pushing its metrics to Prometheus. Go to your Prometheus UI: http://localhost:9090/graph
- In the "Expression" input field, type one of the k6 metric names, for example: ws_connection_success_rate_total and press "Execute" (or select "Graph" tab if it's not already there).
-If you see data on the graph, it means k6 is successfully sending metrics to Prometheus
-----------------
 
 ## Troubleshooting
 

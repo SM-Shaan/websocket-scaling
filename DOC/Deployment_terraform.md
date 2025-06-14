@@ -651,7 +651,7 @@ This project is divided into various chapters, each demonstrating different impl
 - **Chapter 1**: WebSocket Connection and Sticky Sessions ([Learn more](DOC/Stickiness.md))
 - **Chapter 2**: Shared Session Management ([Learn more](DOC/Shared-sessions.md))
 - **Chapter 3**: Scaling WebSocket Applications ([Learn more](DOC/websocket-scaling.md))
-- **Chapter 4**: Terraform Deployment for WebSocket Infrastructure ([Learn more](DOC/Terraform-deployment.md))
+- **Chapter 4**: Terraform Deployment for WebSocket Infrastructure ([Learn more](DOC/Deployment_terraform.md))
 
 ---
 

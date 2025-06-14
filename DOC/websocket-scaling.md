@@ -480,4 +480,4 @@ The success of the scaling implementation is proven when:
 1. **WebSocket Connection and Sticky Sessions** ([Learn more](/DOC/Stickiness.md))
 2. **Shared Session Management** ([Learn more](/DOC/Shared-sessions.md))
 3. **Scaling WebSocket Applications** ([Learn more](/DOC/websocket-scaling.md))
-4.  **Terraform Deployment for WebSocket Infrastructure** ([Learn more](/DOC/Terraform-deployment.md))
+4.  **Terraform Deployment for WebSocket Infrastructure** ([Learn more](/DOC/Deployment_terraform.md))
