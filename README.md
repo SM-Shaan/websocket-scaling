@@ -80,9 +80,9 @@ The project follows a microservices architecture with the following components:
 - Git installed for version control
 - A code editor or IDE (e.g., Visual Studio Code)
 
-### Installation
+### Project Configuration
 
-#### 1. Project Files Configuration
+#### 1. Files Configuration
 -  Create the `app.py` file:
 
 ```python
