@@ -82,11 +82,488 @@ The project follows a microservices architecture with the following components:
 
 ### Installation
 
-1. Clone the repository:
-```bash
-git clone https://github.com/SM-Shaan/websocket-scaling.git
-cd websocket
+#### 1. Project Files Configuration
+-  Create the `app.py` file:
+
+```python
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
+import json
+import logging
+import socket
+from typing import Dict, Set
+from datetime import datetime
+from prometheus_fastapi_instrumentator import Instrumentator
+
+logger = logging.getLogger("uvicorn")
+
+app = FastAPI()
+
+# Instrument FastAPI app for Prometheus metrics
+Instrumentator().instrument(app).expose(app)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, WebSocket] = {}
+        self.rooms: Dict[str, Set[str]] = {
+            "general": set(),
+            "support": set(),
+            "random": set()
+        }
+        self.user_rooms: Dict[str, str] = {}
+
+    async def connect(self, websocket: WebSocket, client_id: str):
+        self.active_connections[client_id] = websocket
+
+    async def disconnect(self, client_id: str):
+        if client_id in self.active_connections:
+            del self.active_connections[client_id]
+        if client_id in self.user_rooms:
+            room = self.user_rooms[client_id]
+            self.rooms[room].remove(client_id)
+            del self.user_rooms[client_id]
+            await self.broadcast_to_room(room, {
+                "type": "user_left",
+                "userId": client_id,
+                "username": client_id
+            })
+
+    async def join_room(self, client_id: str, room: str):
+        if client_id in self.user_rooms:
+            old_room = self.user_rooms[client_id]
+            self.rooms[old_room].remove(client_id)
+        
+        self.rooms[room].add(client_id)
+        self.user_rooms[client_id] = room
+        
+        await self.broadcast_to_room(room, {
+            "type": "user_joined",
+            "userId": client_id,
+            "username": client_id
+        })
+        
+        return list(self.rooms[room])
+
+    async def broadcast_to_room(self, room: str, message: dict):
+        if room in self.rooms:
+            for client_id in self.rooms[room]:
+                if client_id in self.active_connections:
+                    try:
+                        await self.active_connections[client_id].send_json(message)
+                    except Exception as e:
+                        logger.error(f"Error broadcasting to {client_id}: {str(e)}")
+
+manager = ConnectionManager()
+
+@app.get("/")
+async def root():
+    hostname = socket.gethostname()
+    return {"message": f"WebSocket server is running on {hostname}"}
+
+@app.get("/health")
+async def health_check():
+    hostname = socket.gethostname()
+    return {
+        "status": "healthy",
+        "hostname": hostname,
+        "connections": len(manager.active_connections),
+        "active_clients": list(manager.active_connections.keys())
+    }
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    try:
+        await websocket.accept()
+        client_id = str(id(websocket))
+        await manager.connect(websocket, client_id)
+        hostname = socket.gethostname()
+        logger.info(f"New WebSocket connection established: {client_id} on {hostname}")
+        
+        # Send initial connection info
+        await websocket.send_json({
+            "type": "connection",
+            "status": "connected",
+            "client_id": client_id,
+            "hostname": hostname
+        })
+        
+        try:
+            while True:
+                data = await websocket.receive_text()
+                logger.info(f"Received message from {client_id}: {data}")
+                
+                try:
+                    # Try to parse as JSON first
+                    message_data = json.loads(data)
+                    
+                    if message_data.get("type") == "join":
+                        room = message_data.get("room", "general")
+                        users = await manager.join_room(client_id, room)
+                        await websocket.send_json({
+                            "type": "room_users",
+                            "users": list(users)
+                        })
+                    elif message_data.get("type") == "message":
+                        room = manager.user_rooms.get(client_id, "general")
+                        # Send echo response to sender
+                        await websocket.send_json({
+                            "type": "message",
+                            "sender": "server",
+                            "content": message_data.get("content", ""),
+                            "timestamp": datetime.now().isoformat()
+                        })
+                        # Broadcast to room
+                        await manager.broadcast_to_room(room, {
+                            "type": "message",
+                            "sender": client_id,
+                            "content": message_data.get("content", ""),
+                            "timestamp": datetime.now().isoformat()
+                        })
+                except json.JSONDecodeError:
+                    # If not JSON, treat as plain text message
+                    room = manager.user_rooms.get(client_id, "general")
+                    # Send echo response to sender
+                    await websocket.send_json({
+                        "type": "message",
+                        "sender": "server",
+                        "content": data,
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    # Broadcast to room
+                    await manager.broadcast_to_room(room, {
+                        "type": "message",
+                        "sender": client_id,
+                        "content": data,
+                        "timestamp": datetime.now().isoformat()
+                    })
+                
+        except WebSocketDisconnect:
+            logger.info(f"WebSocket disconnected: {client_id}")
+            await manager.disconnect(client_id)
+        except Exception as e:
+            logger.error(f"Error in WebSocket connection {client_id}: {str(e)}")
+            await websocket.close(code=1011, reason="Internal server error")
+    except Exception as e:
+        logger.error(f"Failed to establish WebSocket connection: {str(e)}")
+        if websocket.client_state.CONNECTED:
+            await websocket.close(code=1011, reason="Connection failed")
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000) 
 ```
+
+-  Create the `docker-compose.yml` file:
+```yaml
+# version: '3.8'
+
+services:
+  websocket-server:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - ENVIRONMENT=development
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-remote-write-receiver'
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  k6:
+    image: grafana/k6:latest
+    ports:
+      - "6565:6565"
+    volumes:
+      - ./k6:/scripts
+    environment:
+      - K6_PROMETHEUS_RW_SERVER_URL=http://prometheus:9090/api/v1/write
+      - K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM=false
+    command: run --out experimental-prometheus-rw --tag testid=websocket-test /scripts/websocket-test.js
+
+volumes:
+  prometheus_data:
+  grafana_data: 
+```
+
+- Create the `Dockerfile`:
+```dockerfile
+# create a Dockerfile to containerize the application:
+FROM python:3.9-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"] 
+```
+
+- Create the `requirements.txt` file:
+```
+fastapi==0.109.2
+uvicorn==0.27.1
+websockets==12.0
+python-multipart==0.0.9
+jinja2==3.1.3
+python-dotenv==1.0.1
+redis==5.0.1
+prometheus-client
+prometheus-fastapi-instrumentator==6.0.0
+```
+
+- Create the `test-client.html` file:
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Test Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #messages {
+            height: 300px;
+            border: 1px solid #ccc;
+            margin: 10px 0;
+            padding: 10px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 5px;
+            border-radius: 3px;
+        }
+        .sent {
+            background-color: #e3f2fd;
+        }
+        .received {
+            background-color: #f1f8e9;
+        }
+        .error {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        .status {
+            background-color: #fff3e0;
+        }
+        .controls {
+            margin: 10px 0;
+        }
+        input[type="text"] {
+            width: 70%;
+            padding: 5px;
+        }
+        button {
+            padding: 5px 15px;
+            margin: 0 5px;
+        }
+        #connectionStatus {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+        }
+        .connected {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+        .disconnected {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        .connecting {
+            background-color: #fff3e0;
+            color: #ef6c00;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Test Client</h1>
+    <div id="connectionStatus" class="disconnected">Disconnected</div>
+    <div class="controls">
+        <input type="text" id="messageInput" placeholder="Type a message...">
+        <button onclick="sendMessage()">Send</button>
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+    </div>
+    <div id="messages"></div>
+
+    <script>
+        let ws = null;
+        let connectionTimeout = null;
+        const MAX_RECONNECT_ATTEMPTS = 3;
+        let reconnectAttempts = 0;
+
+        function updateConnectionStatus(status, message) {
+            const statusDiv = document.getElementById('connectionStatus');
+            statusDiv.className = status.toLowerCase();
+            statusDiv.textContent = message;
+        }
+
+        function addMessage(message, type) {
+            const messagesDiv = document.getElementById('messages');
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${type}`;
+            messageElement.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+            messagesDiv.appendChild(messageElement);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                addMessage('Already connected', 'status');
+                return;
+            }
+
+            updateConnectionStatus('connecting', 'Connecting...');
+            addMessage('Attempting to connect...', 'status');
+
+            // Clear any existing connection timeout
+            if (connectionTimeout) {
+                clearTimeout(connectionTimeout);
+            }
+
+            // Set connection timeout
+            connectionTimeout = setTimeout(() => {
+                if (ws && ws.readyState !== WebSocket.OPEN) {
+                    addMessage('Connection timeout', 'error');
+                    updateConnectionStatus('disconnected', 'Connection timeout');
+                    ws.close();
+                }
+            }, 10000);
+
+            try {
+                ws = new WebSocket('ws://localhost:8000/ws');
+
+                ws.onopen = function() {
+                    clearTimeout(connectionTimeout);
+                    updateConnectionStatus('connected', 'Connected');
+                    addMessage('Connection established', 'status');
+                    reconnectAttempts = 0;
+                };
+
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        addMessage(`Received: ${JSON.stringify(data, null, 2)}`, 'received');
+                    } catch (e) {
+                        addMessage(`Received: ${event.data}`, 'received');
+                    }
+                };
+
+                ws.onerror = function(error) {
+                    addMessage(`WebSocket Error: ${error.type}`, 'error');
+                    console.error('WebSocket Error:', error);
+                };
+
+                ws.onclose = function(event) {
+                    clearTimeout(connectionTimeout);
+                    updateConnectionStatus('disconnected', `Disconnected (Code: ${event.code}, Reason: ${event.reason || 'No reason provided'})`);
+                    addMessage(`Connection closed. Code: ${event.code}, Reason: ${event.reason || 'No reason provided'}`, 'error');
+
+                    // Attempt to reconnect if not manually disconnected
+                    if (event.code !== 1000 && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                        reconnectAttempts++;
+                        addMessage(`Attempting to reconnect (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`, 'status');
+                        setTimeout(connect, 2000);
+                    }
+                };
+            } catch (error) {
+                addMessage(`Connection Error: ${error.message}`, 'error');
+                updateConnectionStatus('disconnected', 'Connection failed');
+                console.error('Connection Error:', error);
+            }
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close(1000, 'Client disconnected');
+                ws = null;
+            }
+        }
+
+        function sendMessage() {
+            const messageInput = document.getElementById('messageInput');
+            const message = messageInput.value.trim();
+            
+            if (!message) return;
+
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addMessage('Not connected to server', 'error');
+                return;
+            }
+
+            try {
+                ws.send(message);
+                addMessage(`Sent: ${message}`, 'sent');
+                messageInput.value = '';
+            } catch (error) {
+                addMessage(`Error sending message: ${error.message}`, 'error');
+                console.error('Send Error:', error);
+            }
+        }
+
+        // Handle Enter key in message input
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html> 
+```
+
 
 2. Install dependencies:
 ```bash

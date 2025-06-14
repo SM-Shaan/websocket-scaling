@@ -114,7 +114,7 @@ A shared session allows session data to be maintained and accessed across multip
 
 This demo demonstrates a shared session concept using Nginx load balancer, two Flask application servers, and Redis for session storage.
 
-## Architecturef
+## Architecture Diagram
 
 ![With Stickiness](/DOC/diagrams/dia5.drawio.svg)
 
