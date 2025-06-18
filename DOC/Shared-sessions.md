@@ -112,6 +112,8 @@ A shared session allows session data to be maintained and accessed across multip
 
 # Shared Session Demo Setup 🛠️
 
+![With Stickiness](/DOC/diagrams/dia11.drawio.svg)
+
 This demo showcases the shared session concept by utilizing an Nginx load balancer for sticky sessions, two Flask application servers for handling requests, and Redis as a centralized session storage solution. Together, these components ensure session consistency, scalability, and high availability in a distributed WebSocket application setup.
 
 ## Architecture Diagram
@@ -488,8 +490,6 @@ You can monitor the system using:
 ---
 
 # Demo Setup Deployment Guide
-
-![With Stickiness](/DOC/diagrams/dia11.drawio.svg)
 
 This guide explains how to deploy the demo setup with distributed EC2 instances using Terraform.
 
