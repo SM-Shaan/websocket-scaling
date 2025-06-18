@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'websocket-server-poridhi'
+    static_configs:
+      - targets: ['67ac2c9d1fcfb0b6f0fdcee7-lb-261.bm-southwest.lab.poridhi.io']
+    metrics_path: /metrics
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true 

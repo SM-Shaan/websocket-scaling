@@ -643,6 +643,659 @@ During testing, observe the server console for the following events:
 - **Error Logs**: Any errors encountered during operation, such as connection issues or unexpected exceptions. -->
 ## Load Testing
 
+### Code Configuration:
+
+- Datasource.yml code: 
+```bash
+apiVersion: 1
+
+datasources:
+  - name: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true 
+```
+- Dashboard.yml code:
+```bash
+apiVersion: 1
+
+providers:
+  - name: 'default'
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
+      intervalSeconds: 10 # how often Grafana will scan for changed dashboards 
+```
+- websocket-metrics.json
+```bash
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "k6_ws_connection_success_rate_rate",
+          "refId": "A"
+        }
+      ],
+      "title": "WebSocket Connection Success Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "k6_ws_message_latency_p99",
+          "refId": "A"
+        }
+      ],
+      "title": "WebSocket Message Latency (P99)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "k6_ws_sessions_total",
+          "refId": "A"
+        }
+      ],
+      "title": "WebSocket Sessions Total",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "k6_ws_msgs_sent_total",
+          "refId": "A"
+        }
+      ],
+      "title": "WebSocket Messages Sent Total",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "k6_ws_msgs_received_total",
+          "refId": "A"
+        }
+      ],
+      "title": "WebSocket Messages Received Total",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "k6_vus",
+          "refId": "A"
+        }
+      ],
+      "title": "Active Virtual Users",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": [],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "WebSocket Load Test Metrics",
+  "uid": "websocket-metrics",
+  "version": 1,
+  "weekStart": ""
+} 
+```
+- websocket-test.js
+```bash
+import ws from 'k6/ws';
+import { check, sleep } from 'k6';
+import { Rate, Trend, Counter } from 'k6/metrics';
+
+// Custom metrics
+const connectionSuccessRate = new Rate('ws_connection_success_rate');
+const messageSuccessRate = new Rate('ws_message_success_rate');
+const messageLatency = new Trend('ws_message_latency');
+const connectionErrors = new Counter('ws_connection_errors');
+const messageErrors = new Counter('ws_message_errors');
+
+export const options = {
+  stages: [
+    { duration: '1m', target: 50 },  // Ramp up to 50 users
+    { duration: '3m', target: 50 },  // Stay at 50 users
+    { duration: '1m', target: 100 }, // Ramp up to 100 users
+    { duration: '3m', target: 100 }, // Stay at 100 users
+    { duration: '1m', target: 0 },   // Ramp down to 0 users
+  ],
+  thresholds: {
+    'ws_connection_success_rate': ['rate>0.95'],
+    'ws_message_success_rate': ['rate>0.95'],
+    'ws_message_latency': ['p(95)<500'],
+  },
+};
+
+export default function () {
+  const url = 'ws://websocket-server:8000/ws';
+  const params = {
+    tags: { name: 'websocket-test' },
+  };
+
+  const res = ws.connect(url, params, function (socket) {
+    socket.on('open', () => {
+      connectionSuccessRate.add(1);
+      console.log('WebSocket connection established');
+    });
+
+    socket.on('message', (data) => {
+      const message = JSON.parse(data);
+      messageSuccessRate.add(1);
+      messageLatency.add(message.timestamp ? Date.now() - new Date(message.timestamp).getTime() : 0);
+    });
+
+    socket.on('error', (e) => {
+      connectionErrors.add(1);
+      console.error('WebSocket error:', e);
+    });
+
+    socket.on('close', () => {
+      console.log('WebSocket connection closed');
+    });
+
+    // Send messages every 2 seconds
+    socket.setInterval(function () {
+      const message = {
+        type: 'message',
+        content: `Test message from VU ${__VU}`,
+        timestamp: new Date().toISOString(),
+      };
+
+      socket.send(JSON.stringify(message));
+    }, 2000);
+
+    // Keep the connection alive for 30 seconds
+    socket.setTimeout(function () {
+      socket.close();
+    }, 30000);
+  });
+
+  check(res, {
+    'Connected successfully': (r) => r && r.status === 101,
+  });
+
+  sleep(1);
+} 
+```
+
 ### Step 1: Start the Stack
 Open docker desktop. Run the following command to build and start the stack:
 ```bash
@@ -660,22 +1313,27 @@ docker-compose up -d --build
    - **Password**: `admin`
 - Add Prometheus as a data source:
    1. Navigate to **Configuration > Data Sources**.
-   2. Click **Add data source**.
-   3. Select **Prometheus**.
-   4. Set the URL to `http://prometheus:9090`.
-   5. Click **Save & Test**.
-- Import the dashboard:
+   2. Click **Add data source**. (if need)
+   3. Select **Prometheus**. (if need)
+   4. Set the URL to `http://prometheus:9090`. (if need )
+   5. Click **Save & Test**. (if need)
+- Import the dashboard: ( if need)
    1. Go to **Dashboards > Import**.
    2. Click **Upload JSON file**.
    3. Select the `grafana-dashboard.json` file.
    4. Click **Import**.
 
+
 ### Step 4: Run Load Tests
 - Install k6 from [k6 Installation Guide](https://grafana.com/docs/k6/latest/set-up/install-k6/). For Windows, use the MSI installer.
 - Run the load test:
 ```bash
-& 'C:\Program Files\k6\k6.exe' run load-test.js
+# & 'C:\Program Files\k6\k6.exe' run k6/websocket-test.js
+& 'path-to-the-k6.exe' run k6/websocket-test.js
 ```
+
+- Make sure the time range in the top-right corner is set to "Last 15 minutes" or "Last 1 hour"
+- The dashboard refreshes every 5 seconds automatically
 
 ### Step 5: Monitor the Results
 - Open the Grafana dashboard to monitor:
@@ -683,6 +1341,13 @@ docker-compose up -d --build
    - Message latency.
    - Message throughput.
 - The dashboard updates automatically every 5 seconds.
+
+![Health_check](DOC/images/16.png)
+![Health_check](DOC/images/17.png)
+
+- **In prometheus**:
+
+![Health_check](DOC/images/18.png)
 
 ### Load Test Configuration
 The load test will:
@@ -700,32 +1365,109 @@ docker-compose up -d --scale app=3
 - All instances will share the same Redis instance for message broadcasting.
 - Prometheus will collect metrics from all instances.
 
-### Features of the Setup
-- **Redis**: Used for message broadcasting across instances.
-- **Session Persistence**: Managed in Redis.
-- **Prometheus**: Collects metrics from all instances.
-- **Grafana**: Provides visualization of metrics.
-- **k6**: Performs load testing.
+## Poridhi Lab Integration
+1. Clone the repository:
+```bash
+git clone https://github.com/SM-Shaan/websocket-scaling.git
+cd websocket
+```
+
+2. Set up Python environment:
+```bash
+# For Poridhi lab
+apt-get update
+apt-get install -y python3-venv
+
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+3. Start the services:
+```bash
+docker-compose up -d
+```
+
+### Poridhi Lab Setup
+
+### Step 1: Access the Application via Load Balancer
+- Ensure the application is accessible through the load balancer configured in Poridhi Lab.
+
+### Step 2: Configure IP and Port
+- Retrieve the IP address from `eth0` using the command:
+    ```bash
+    ifconfig
+    ```
+- Use the application port specified in the `Dockerfile`.
+
+### Step 3: Create a Load Balancer in Poridhi Lab
+- Navigate to the Poridhi Lab dashboard and create a load balancer.
+- Configure the load balancer with the following settings:
+    - **IP Address**: Use the IP retrieved from `ifconfig`.
+    - **Ports**: Include ports for FastAPI, RabbitMQ UI, and Flower.
+
+![Load Balancer Setup](DOC/images/pori1.png)
+
+### Step 4: Configure Application IP and Port
+- Enter the IP address and ports for each service:
+    - **FastAPI**: Application port (e.g., `8000`).
+    - **Prometheus**: Management port (e.g., `9090`).
+    - **Grafana**: Monitoring port (e.g., `3000`).
+
+![Load Balancer Setup](DOC/images/pori3.png)
+
+### Step 5: Verify URLs
+- Test the URLs generated by the load balancer to ensure proper routing and accessibility.
+
+![Load Balancer Setup](DOC/images/pori2.png)
 
 
-## Troubleshooting
+### Step 6: Test WebSocket Connection
+1. In `test.html`, update the path (if need):
+``` 
+ws = new WebSocket('ws://<load-balancer-IP>/ws');
+```
+2. Open the `test.html` file in your web browser
+3. You should see:
+   - A message box
+   - A "Connected to WebSocket server" message
+   - An input field to type messages
 
-Common issues and solutions:
+### Step 7: Test Message Exchange
+1. Type a message in the input field
+2. Click "Send" or press Enter
+3. You should see:
+   - "Sent: [your message]" in the message box
+   - "Received: [your message]" as an echo response
 
-1. **Connection Issues**
-   - Check security groups
-   - Verify ALB configuration
-   - Check instance health
+![Health_check](DOC/images/local1.png)
+### Step 8: Test Multiple Connections
+1. Open `test.html` in multiple browser windows
+2. Each window should:
+   - Connect successfully
+   - Show its own connection status
+   - Be able to send/receive messages independently
 
-2. **Performance Issues**
-   - Monitor instance metrics
-   - Check ALB metrics
-   - Verify auto-scaling
+![Health_check](DOC/images/2.png)
 
-3. **Deployment Issues**
-   - Check Terraform state
-   - Verify IAM permissions
-   - Check container logs
+
+### Step 9: Test Error Handling
+
+1. Stop the WebSocket server by pressing `Ctrl+C` in the terminal.
+2. Observe the `test.html` browser window:
+   - It should display a message like "Disconnected from WebSocket server."
+3. Restart the WebSocket server using the command:
+   ```bash
+   python app.py
+   ```
+4. Verify that the connection in `test.html` automatically reconnects and resumes functionality.
+
+![Health_check](DOC/images/4.png)
+
+### Additional Notes
+- Ensure the load balancer health checks are configured correctly to monitor service availability.
+- Use the Poridhi Lab dashboard to monitor traffic and performance metrics.
 
 
 ## Additional Resources
@@ -741,5 +1483,3 @@ Common issues and solutions:
 3. Commit your changes
 4. Push to the branch
 5. Create a Pull Request
------------------------------
-

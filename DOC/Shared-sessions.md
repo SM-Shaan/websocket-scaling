@@ -112,7 +112,7 @@ A shared session allows session data to be maintained and accessed across multip
 
 # Shared Session Demo Setup 🛠️
 
-This demo demonstrates a shared session concept using Nginx load balancer, two Flask application servers, and Redis for session storage.
+This demo showcases the shared session concept by utilizing an Nginx load balancer for sticky sessions, two Flask application servers for handling requests, and Redis as a centralized session storage solution. Together, these components ensure session consistency, scalability, and high availability in a distributed WebSocket application setup.
 
 ## Architecture Diagram
 
@@ -486,6 +486,179 @@ You can monitor the system using:
    ``` 
 
 ---
+
+# Demo Setup Deployment Guide
+
+![With Stickiness](/DOC/diagrams/dia11.drawio.svg)
+
+This guide explains how to deploy the demo setup with distributed EC2 instances using Terraform.
+
+## Architecture Overview
+
+The deployment creates 4 EC2 instances across 2 availability zones:
+
+1. **Nginx Instance** (Load Balancer) - `t2.micro`
+   - Handles incoming HTTP traffic
+   - Implements sticky sessions using `ip_hash`
+   - Routes traffic to two WebSocket application instances
+
+2. **WebSocket App 1** (Flask Application) - `t2.micro`
+   - Runs the Flask application with session management
+   - Connects to Redis for shared session storage
+   - Handles WebSocket connections
+
+3. **WebSocket App 2** (Flask Application) - `t2.micro`
+   - Identical to App 1 for load balancing
+   - Shares sessions with App 1 via Redis
+
+4. **Redis Instance** (Session Storage) - `t2.micro`
+   - Provides shared session storage for both Flask applications
+   - Enables session persistence across application instances
+
+## Network Configuration
+
+- **VPC**: `10.0.0.0/16`
+- **Subnet 1**: `10.0.1.0/24` (AZ 1) - Nginx, WebSocket Apps
+- **Subnet 2**: `10.0.2.0/24` (AZ 2) - Redis
+- **Security Groups**: Properly configured for inter-instance communication
+
+## Prerequisites
+
+1. **AWS CLI** configured with appropriate credentials
+2. **Terraform** installed (version >= 1.0)
+3. **SSH Key Pair** for EC2 access
+
+## Deployment Steps
+
+### 1. Prepare SSH Key
+
+Ensure you have the SSH key pair files in the terraform directory:
+- `websocket-key` (private key)
+- `websocket-key.pub` (public key)
+
+### 2. Initialize Terraform
+
+```bash
+cd terraform
+terraform init
+```
+
+### 3. Plan the Deployment
+
+```bash
+terraform plan -var-file="demo-terraform.tfvars" -target=aws_vpc.demo
+terraform plan -var-file="demo-terraform.tfvars"
+```
+
+### 4. Deploy the Infrastructure
+
+```bash
+terraform apply -var-file="demo-terraform.tfvars"
+```
+
+### 5. Verify Deployment
+
+After deployment, Terraform will output the public IPs:
+
+```bash
+terraform output
+```
+
+You should see:
+- `nginx_public_ip` - Access point for the application
+- `websocket_app1_public_ip` - Direct access to App 1
+- `websocket_app2_public_ip` - Direct access to App 2
+- `redis_public_ip` - Redis instance (for monitoring)
+
+### 6. Test the Application
+
+Access the application through Nginx:
+```bash
+curl http://<nginx_public_ip>
+```
+
+Expected response:
+```json
+{
+  "message": "Hello from <hostname>!",
+  "visits": 1,
+  "session_id": "<session_id>"
+}
+```
+
+## Testing Session Persistence
+
+1. **Test Sticky Sessions**: Make multiple requests to the Nginx URL
+   - You should see the same hostname in responses
+   - Visit counter should increment
+
+2. **Test Session Sharing**: Access both app instances directly
+   - Session data should be shared between instances
+   - Visit counter should continue from where it left off
+
+## Monitoring and Troubleshooting
+
+### Check Instance Status
+
+```bash
+# SSH into instances
+ssh -i websocket-key ec2-user@<instance_public_ip>
+
+# Check Docker containers
+docker ps
+docker logs <container_name>
+
+# Check application logs
+sudo tail -f /var/log/user-data.log
+```
+
+### Common Issues
+
+1. **Redis Connection Issues**
+   - Verify security group allows port 6379
+   - Check Redis container is running
+   - Verify private IP is correct in app configuration
+
+2. **Nginx Configuration Issues**
+   - Check nginx.conf syntax
+   - Verify backend server IPs are correct
+   - Check nginx container logs
+
+3. **Application Issues**
+   - Check Flask app logs
+   - Verify Redis connection
+   - Check port 5000 is accessible
+
+## Cleanup
+
+To destroy the infrastructure:
+
+```bash
+terraform destroy -var-file="demo-terraform.tfvars"
+```
+
+## Security Considerations
+
+- All instances have SSH access enabled (port 22)
+- Redis is only accessible from WebSocket app instances
+- WebSocket apps are only accessible from Nginx
+- Nginx is accessible from the internet (port 80)
+
+## Cost Optimization
+
+- All instances use `t2.micro` (free tier eligible)
+- Consider using Spot Instances for cost savings
+- Monitor usage and scale down when not needed
+
+## Scaling Considerations
+
+To scale the application:
+
+1. **Horizontal Scaling**: Add more WebSocket app instances
+2. **Vertical Scaling**: Increase instance types
+3. **Load Balancer**: Replace Nginx with AWS ALB for better scaling
+4. **Redis Cluster**: Use ElastiCache for production Redis needs 
+
 ## 📋 Best Practices
 
 1. **Choose Based on Requirements**  

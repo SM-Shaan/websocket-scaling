@@ -19,7 +19,7 @@ services:
       - redis
 
   app2:
-    build: ./app1  # Reusing the same app code
+    build: ./app1 
     environment:
       - FLASK_ENV=production
     depends_on:
